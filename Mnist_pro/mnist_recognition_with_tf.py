@@ -3,10 +3,10 @@
 
 """
 # version: 1.0
+# version description: mnist dataset recognition with softmax
 # 
 # date: 2017.10.13
 # author: michaelzph
-#
 #
 """
 
