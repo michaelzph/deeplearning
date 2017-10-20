@@ -2,10 +2,10 @@
 #! -*- encoding:utf-8 -*-
 
 """
-# version: 1.0
+# 
 # version description: mnist dataset recognition with softmax
 # 
-# date: 2017.10.13
+# date: 2017.10
 # author: michaelzph
 #
 """
@@ -17,7 +17,7 @@ import tensorflow as tf
 from tensorflow.examples.tutorials.mnist import input_data
 
 # step1: read data
-MNIST = input_data.read_data_sets("/data/mnist", one_hot=True)
+MNIST = input_data.read_data_sets("/mnist-dataset", one_hot=True)
 
 
 # step2: Definite paramters for the model
