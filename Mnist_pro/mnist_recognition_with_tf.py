@@ -17,7 +17,7 @@ import tensorflow as tf
 from tensorflow.examples.tutorials.mnist import input_data
 
 # step1: read data
-MNIST = input_data.read_data_sets("/mnist-dataset", one_hot=True)
+MNIST = input_data.read_data_sets("mnist-dataset", one_hot=True)
 
 
 # step2: Definite paramters for the model
@@ -64,7 +64,7 @@ with tf.Session() as sess:
       print("the {0}th epoches".format(i))
       #print("weithgs: {}, bias: {}".format(w_value, b_value))
       print("loss: {:.4f}".format(l_value))
-  writer = tf.summary.FileWriter("graphs/LR_Mnist", sess.graph)
+  writer = tf.summary.FileWriter("graphs/Mnist_graph", sess.graph)
   
   # test the model
   n_batches = int(MNIST.test.num_examples / batch_size)
