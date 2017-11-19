@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 import time
+import os
 
 
 # image data file
@@ -19,6 +20,7 @@ images = pd.read_csv(trainfile)
 # data process
 img_data = images.iloc[:, 1:].values
 img_data = img_data.astype(np.float32)
+img_data /= 255.0
 
 # image size, width and height of each image 
 img_size = img_data.shape[1]
@@ -109,39 +111,40 @@ def do_dropout(last_out, keep_prob):
 
 epochs_completed = 0
 index_in_epoch = 0
-num_examples = img_data.shape[0]
+#num_examples = img_data.shape[0]
 
 # create next batch for training
-def next_batch(batch_size):
+def next_batch(batch_size, data_, label_):
     global epochs_completed
     global index_in_epoch 
-    global num_examples
+    #global num_examples
+    num_examples = data_.shape[0]
     
     start = index_in_epoch 
-    if start + batch_size > num_examples:
+    if index_in_epoch + batch_size > num_examples:
         epochs_completed += 1
         # get the rest examples in this epoch
-        rest_num_examples = num_examples - batch_size
-        rest_image_part_1 = train_data[start: rest_num_examples]
-        rest_label_part_1 = train_label[start: rest_num_examples]
+        rest_num_examples = num_examples - start
+        rest_image_part_1 = data_[start: num_examples]
+        rest_label_part_1 = label_[start: num_examples]
         perm = np.arange(num_examples)
         np.random.shuffle(perm)
         index_in_epoch = batch_size - rest_num_examples
-        rest_image_part_2 = train_data[0: index_in_epoch]
-        rest_label_part_2 = train_label[0: index_in_epoch]
+        rest_image_part_2 = data_[0: index_in_epoch]
+        rest_label_part_2 = label_[0: index_in_epoch]
         image_new = np.concatenate((rest_image_part_1, rest_image_part_2), axis=0)
         label_new = np.concatenate((rest_label_part_1, rest_label_part_2), axis=0)
         return image_new, label_new 
     else:
-        start = index_in_epoch
-        end = index_in_epoch + batch_size
-        image = train_data[start:end]
-        label = train_label[start:end]
+        index_in_epoch += batch_size
+        end = index_in_epoch
+        image = data_[start:end]
+        label = label_[start:end]
         return image, label
-
+    
     
 # build cnn for mnist
-def build_cnn(X, y, img_height, img_width, keep_conv, keep_fuc):
+def build_cnn(X, img_height, img_width, keep_conv, keep_fuc):
     with tf.name_scope("reshape"):
         image_input = tf.reshape(X, [-1, img_height, img_width, 1])
     # layer_1
@@ -153,7 +156,7 @@ def build_cnn(X, y, img_height, img_width, keep_conv, keep_fuc):
         h_pool1 = max_pool_2x2(h_conv1)
     
     with tf.name_scope("dropout1"):
-        h_dropout1 = do_dropout(h_pool1, keep_prob=keep_conv)
+        h_dropout1 = do_dropout(h_pool1, keep_conv)
     
     # layer_2 
     with tf.name_scope("conv2"):
@@ -165,7 +168,8 @@ def build_cnn(X, y, img_height, img_width, keep_conv, keep_fuc):
         h_pool2 = max_pool_2x2(h_conv2)
     
     with tf.name_scope("dropout2"):
-        h_dropout2 = do_dropout(h_pool2, keep_prob=keep_conv)
+        h_dropout2 = do_dropout(h_pool2, keep_conv)
+    
     
     # layer_3 
     with tf.name_scope("conv3"):
@@ -177,7 +181,8 @@ def build_cnn(X, y, img_height, img_width, keep_conv, keep_fuc):
         h_pool3 = max_pool_2x2(h_conv3)
     
     with tf.name_scope("dropout3"):
-        h_dropout3 = do_dropout(h_pool3, keep_prob=keep_conv)
+        h_dropout3 = do_dropout(h_pool3, keep_conv)
+     
     
     # fuc1 
     with tf.name_scope("fuc1"):
@@ -185,58 +190,135 @@ def build_cnn(X, y, img_height, img_width, keep_conv, keep_fuc):
         b_fuc1 = init_bias([1024])
         h_fuc1_flat = tf.reshape(h_dropout3, [-1, 128*4*4])
         h_fuc1 = tf.nn.relu(tf.matmul(h_fuc1_flat, w_fuc1) + b_fuc1)
-        h_fuc1_drop = do_dropout(h_fuc1, keep_prob=keep_fuc)
-        
+        h_fuc1_drop = do_dropout(h_fuc1, keep_fuc)
+       
+    
     # fuc2
     with tf.name_scope("fuc2"):
         w_fuc2 = init_weight([1024, 10])
         b_fuc2 = init_bias([10])
-        h_fuc2 = tf.nn.relu(tf.matmul(h_fuc1_drop, w_fuc2) + b_fuc2)
-        out = do_dropout(h_fuc2, keep_prob=keep_fuc)
+        h_fuc2 = tf.matmul(h_fuc1_drop, w_fuc2) + b_fuc2
+        #out = do_dropout(h_fuc2, keep_fuc)
         
-    return out
-
+    return h_fuc2
 
 
 # train the model
 def training():
     
-    y_pred = build_cnn(X_input, y_output, img_height, img_width, keep_conv, keep_fuc)
-    print("type of y_pred --> {}".format(y_pred))
-    loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=y_pred, labels=y_output))
-    optimization = tf.train.AdamOptimizer(learning_rate=0.001, beta1=0.9, beta2=0.999, epsilon=1e-08).minimize(loss)
+    y_pred = build_cnn(X_input, img_height, img_width, keep_conv, keep_fuc)
+    cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=y_pred, labels=y_output))
+    optimization = tf.train.AdamOptimizer(learning_rate=0.001, beta1=0.9, beta2=0.999, epsilon=1e-08).minimize(cost)
     correct_pred = tf.equal(tf.arg_max(y_pred, 1), tf.arg_max(y_output, 1))
     accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
 
     batch_size = 128
     dev_size = 256
-    iteration = 100
+    iteration = 11000
+    #train_epochs = int(train_data.shape[0] / batch_size)
+    #dev_epochs = int(dev_data.shape[0] / dev_size)
 
-    epochs = int(train_data.shape[0] / batch_size)
+    ckpt_dir = "./ckpt_dir"
+    if not os.path.exists(ckpt_dir):
+        os.makedirs(ckpt_dir)
+
+    global_step = tf.Variable(0, name='global_step', trainable=False)
+    saver = tf.train.Saver()
 
     with tf.Session() as sess:
         tf.global_variables_initializer().run()
+	
+        start = global_step.eval()
 
         for i in range(iteration):
             s_time = time.clock()
-
-            for epo in range(epochs):
-	                
-                train_x, train_y = next_batch(batch_size)
-                sess.run(optimization, feed_dict={X_input:train_x, y_output:train_y, keep_conv:0.5, keep_fuc:1.0})
-                train_accuracy = accuracy.eval(feed_dict={X_input:train_x, y_output:train_y, keep_conv: 0.5, keep_fuc: 1.0})
-                tf.summary.scalar("train accuracy", train_accuracy)
             
-                dev_x, dev_y = next_batch(dev_size)
+            train_x, train_y = next_batch(batch_size, train_data, train_label)
+            sess.run(optimization, feed_dict={X_input:train_x, y_output:train_y, keep_conv:0.5, keep_fuc:1.0})
+            
+            #train_accuracy = accuracy.eval(feed_dict={X_input:train_x, y_output:train_y, keep_conv: 0.5, keep_fuc: 1.0})
+            
+            #tf.summary.scalar("train accuracy", train_accuracy)
+            
+            #dev_x, dev_y = next_batch(dev_size, dev_data, dev_label)
+            #dev_accuracy = accuracy.eval(feed_dict={X_input:dev_x, y_output:dev_y, keep_conv: 0.5, keep_fuc: 1.0})
+            
+            #tf.summary.scalar("dev accuracy", dev_accuracy)
+            
+            #tf.summary.FileWriter("log/train", sess.graph)
+
+            #global_step.assign(i).eval()
+            #saver.save(sess, ckpt_dir + "/model.ckpt", global_step=global_step)
+
+            if i % 100 == 0:
+                #global_step.assign(i).eval()
+                #saver.save(sess, ckpt_dir + "/model.ckpt", global_step=global_step)
+                
+                train_accuracy = accuracy.eval(feed_dict={X_input:train_x, y_output:train_y, keep_conv: 0.5, keep_fuc: 1.0})
+           
+                dev_x, dev_y = next_batch(dev_size, dev_data, dev_label)
                 dev_accuracy = accuracy.eval(feed_dict={X_input:dev_x, y_output:dev_y, keep_conv: 0.5, keep_fuc: 1.0})
-                tf.summary.scalar("dev accuracy", dev_accuracy)
 
-                print("epoch {0}: train accuracy / dev accuracy ----> {1:.6f} / {2:.6f}".format(epo, train_accuracy, dev_accuracy))
-
-                tf.summary.FileWriter("log/train", sess.graph)
                 e_time = time.clock()
-            print("iter {0}: train accuracy / dev accuracy ----> {1:.6f} / {2:.6f}".format(i, train_accuracy, dev_accuracy))
-            print("each iter cost: {:.6f}".format(e_time - s_time))
+                print("iter {0}: train accuracy / dev accuracy ----> {1:.6f} / {2:.6f} , cost {3:.4f}s".format(i, train_accuracy, dev_accuracy, e_time-s_time))
+
+                #print("each iter cost: {:.6f}s".format(e_time - s_time))
+
+
+        TEST_BATCH_SIZE = 128
+        test_img = pd.read_csv(testfile)
+        print(test_img.shape)
+        test_img = test_img.astype(np.float32)
+
+        test_img = np.multiply(test_img, 1.0/255.0)
+
+        pred_label = np.zeros(test_img.shape[0])
+
+        ypred = tf.nn.softmax(y_pred)
+        ytest_label = tf.arg_max(ypred, 1)
+
+        for i in range(0, test_img.shape[0] // TEST_BATCH_SIZE):
+            pred_label[i*TEST_BATCH_SIZE: (i+1)*TEST_BATCH_SIZE] = ytest_label.eval(feed_dict={X_input:test_img[i*TEST_BATCH_SIZE: (i+1)*TEST_BATCH_SIZE],
+										keep_conv:1.0,
+	                                                                        keep_fuc:1.0})
+
+        print("pred_label{0}".format(len(pred_label)))
+
+        # save result
+        result = pd.Series(pred_label, name='Label')
+
+        submission = pd.concat([pd.Series(range(1, len(test_img+1)), name='ImgId'), result], axis=1)
+        submission.to_csv('submission_cnn.csv', index=False)
+
+
+"""
+
+def predict():
+    predict = tf.arg_max(y_output, 1)
+    
+    # test image
+    TEST_BATCH_SIZE = 128
+    test_img = pd.read_csv(testfile)
+    print(test_img.shape)
+    test_img = test_img.astype(np.float32)
+
+    test_img = np.multiply(test_img, 1.0/255.0)
+
+    pred_label = np.zeros(test_img.shape[0])
+
+    for i in range(0, test_img.shape[0] // TEST_BATCH_SIZE):
+        pred_label[i*TEST_BATCH_SIZE: (i+1)*TEST_BATCH_SIZE] = predict.eval(feed_dict={X_input:test_img[i*TEST_BATCH_SIZE: (i+1)*TEST_BATCH_SIZE],
+                                                                        keep_fuc:1.0})
+
+    print("pred_label{0}".format(len(pred_label)))
+
+    # save result
+    result = pd.Series(predict, name='Label')
+
+    submission = pd.concat([pd.Series(range(1, len(test_img+1)), name='ImgId'), result], axis=1)
+    submission.to_csv('submission_cnn.csv', index=False)
+"""
+    
             
 
 
